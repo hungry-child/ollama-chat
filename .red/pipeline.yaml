@@ -1,10 +1,10 @@
 # .red/pipeline.yaml
 ci:
-  script: ../cicd/build.sh
+  script: ../cicd-local/build.sh
   params:
     - image: chat-app:latest
 cd:
-  script: ../cicd/deploy.sh
+  script: ../cicd-local/deploy.sh
   params:
     - image: chat-app:latest
     - container_name: ollama-chat
