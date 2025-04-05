@@ -28,6 +28,6 @@ spec:
     app: chat-app
   ports:
   - protocol: TCP
-    port: 3030
+    port: 5000
     targetPort: 3030
   type: ClusterIP
