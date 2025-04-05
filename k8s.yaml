@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: chat-app
-        image: chat-app:latest
+        image: chat-app:v1
         ports:
         - containerPort: 3030
 ---
