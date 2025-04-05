@@ -1,2 +1,2 @@
 # ollama-chat
-chat with ollama llm models
+chat with ollama llm models running locally
