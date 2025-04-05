@@ -7,3 +7,4 @@ cd:
   script: ../cicd/deploy.sh
   params:
     - image: chat-app:latest
+    - container_name: ollama-chat
