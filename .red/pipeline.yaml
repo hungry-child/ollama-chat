@@ -1,0 +1,9 @@
+# .red/pipeline.yaml
+ci:
+  script: ../cicd/build.sh
+  args:
+    - --tag chat-app:latest
+cd:
+  script: ../cicd/deploy.sh
+  args:
+    - --image chat-app:latest

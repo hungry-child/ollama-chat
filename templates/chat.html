@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Chat & Image Processing</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 10px;
+            background-color: #f4f4f4;
+            font-family: Arial, sans-serif;
+        }
+        .chat-container {
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            width: 85%; /* Cover 85% of the page width */
+            max-width: 800px; /* Limit maximum width for readability */
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgb(0 0 0 / 10%);
+        }
+        .model-select {
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        .model-select select {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            text-align: right;
+            background-color: #e6f7ff; /* Light blue for user messages */
+            color: #333;
+        }
+        .bot-message {
+            text-align: left;
+            background-color: #f5f5f5; /* Light gray for bot messages */
+            color: #333;
+        }
+        .image-container {
+            max-width: 100%;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .image-container img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+        }
+        #user-input {
+            width: 98%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            resize: vertical;
+            height: 100px; /* Doubled height */
+        }
+        button {
+            width: 100%;
+            padding: 20px; /* Doubled padding for increased height */
+            background-color: #333333;
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px 0 #00000033;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+        button:hover {
+            background-color: #1a1a1a;
+            transform: scale(1.05);
+        }
+        .file-input-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .file-input-container label {
+            cursor: pointer;
+            padding: 10px 15px;
+            background-color: #e0e0e0;
+            color: #333;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .file-input-container input[type="file"] {
+            display: none;
+        }
+        .file-name {
+            font-size: 0.85em;
+            color: #666;
+        }
+        .mode-toggle {
+            display: flex;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+        .mode-button {
+            flex: 1;
+            padding: 10px;
+            background-color: #e0e0e0;
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .mode-button.active {
+            background-color: #333;
+            color: white;
+        }
+        .image-preview {
+            margin-top: 10px;
+            text-align: center;
+        }
+        .image-preview img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="model-select">
+            <select id="model-select">
+                <option value="">Loading models...</option>
+            </select>
+        </div>
+        
+        <div class="mode-toggle">
+            <button id="text-mode" class="mode-button active" onclick="setMode('text')">Text Chat</button>
+            <button id="image-mode" class="mode-button" onclick="setMode('image')">Image Processing</button>
+        </div>
+        
+        <div class="chat-box" id="chat-box">
+            <!-- Chat messages will appear here -->
+        </div>
+        
+        <div class="input-section" id="text-input-section">
+            <textarea id="user-input" placeholder="Type your message..."></textarea>
+            <button onclick="sendMessage()">Send</button>
+        </div>
+        
+        <div class="input-section" id="image-input-section" style="display: none;">
+            <div class="file-input-container">
+                <label for="image-upload">Choose Image</label>
+                <input type="file" id="image-upload" accept="image/*" onchange="previewImage(this)">
+                <span class="file-name" id="file-name">No file selected</span>
+            </div>
+            
+            <div class="image-preview" id="image-preview"></div>
+            
+            <textarea id="image-prompt" placeholder="Describe what changes you want (e.g. 'Change the background to blue' or 'Remove the person on the right')"></textarea>
+            
+            <button onclick="processImage()">Process Image</button>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentMode = 'text';
+        let uploadedImagePath = null;
+        
+        // Set the mode (text or image)
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('text-mode').classList.toggle('active', mode === 'text');
+            document.getElementById('image-mode').classList.toggle('active', mode === 'image');
+            
+            document.getElementById('text-input-section').style.display = mode === 'text' ? 'flex' : 'none';
+            document.getElementById('image-input-section').style.display = mode === 'image' ? 'flex' : 'none';
+        }
+        
+        // Preview the selected image
+        function previewImage(input) {
+            const preview = document.getElementById('image-preview');
+            const fileNameDisplay = document.getElementById('file-name');
+            
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                fileNameDisplay.textContent = file.name;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                preview.innerHTML = '';
+                fileNameDisplay.textContent = 'No file selected';
+            }
+        }
+        
+        // Fetch the list of models from the server
+        async function fetchModels() {
+            try {
+                const response = await fetch('/models');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch models.');
+                }
+                const data = await response.json();
+                const modelSelect = document.getElementById('model-select');
+
+                // Clear the loading message
+                modelSelect.innerHTML = '';
+
+                // Add each model to the dropdown
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.model;
+                    option.textContent = model.model;
+                    modelSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching models:', error);
+                const modelSelect = document.getElementById('model-select');
+                modelSelect.innerHTML = '<option value="">Failed to load models</option>';
+            }
+        }
+
+        // Send the user's message to the server (text mode)
+        async function sendMessage() {
+            const userInput = document.getElementById('user-input');
+            const chatBox = document.getElementById('chat-box');
+            const modelSelect = document.getElementById('model-select');
+            const selectedModel = modelSelect.value;
+
+            if (!userInput.value.trim()) {
+                alert('Please enter a message.');
+                return;
+            }
+
+            if (!selectedModel) {
+                alert('Please select a model.');
+                return;
+            }
+
+            // Display user message
+            const userMessage = document.createElement('div');
+            userMessage.classList.add('message', 'user-message');
+            userMessage.innerHTML = `<strong>You:</strong> ${userInput.value.replace(/(?:\r\n|\r|\n)/g, '<br>')}`;
+            chatBox.appendChild(userMessage);
+
+            // Send message to the server
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: userInput.value, model: selectedModel }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get a response from the server.');
+                }
+
+                const data = await response.json();
+
+                // Display bot message
+                const botMessage = document.createElement('div');
+                botMessage.classList.add('message', 'bot-message');
+                botMessage.innerHTML = `<strong>Ollama:</strong> ${data.response.replace(/(?:\r\n|\r|\n)/g, '<br>')}`;
+                chatBox.appendChild(botMessage);
+            } catch (error) {
+                // Display error message
+                const errorMessage = document.createElement('div');
+                errorMessage.classList.add('message', 'bot-message');
+                errorMessage.innerHTML = `<strong>Error:</strong> Ollama is currently unavailable. Please try again later.`;
+                chatBox.appendChild(errorMessage);
+            }
+
+            // Clear input and scroll to bottom
+            userInput.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        // Upload and process image (image mode)
+        async function processImage() {
+            const imageInput = document.getElementById('image-upload');
+            const imagePrompt = document.getElementById('image-prompt');
+            const chatBox = document.getElementById('chat-box');
+            const modelSelect = document.getElementById('model-select');
+            const selectedModel = modelSelect.value;
+            
+            if (!imageInput.files || imageInput.files.length === 0) {
+                alert('Please select an image.');
+                return;
+            }
+            
+            if (!imagePrompt.value.trim()) {
+                alert('Please describe what changes you want to make to the image.');
+                return;
+            }
+            
+            if (!selectedModel) {
+                alert('Please select a model.');
+                return;
+            }
+            
+            // First, upload the image
+            const formData = new FormData();
+            formData.append('image', imageInput.files[0]);
+            
+            try {
+                // Display user request
+                const userMessage = document.createElement('div');
+                userMessage.classList.add('message', 'user-message');
+                userMessage.innerHTML = `<strong>You:</strong> ${imagePrompt.value.replace(/(?:\r\n|\r|\n)/g, '<br>')}`;
+                chatBox.appendChild(userMessage);
+                
+                // Add a loading message
+                const loadingMessage = document.createElement('div');
+                loadingMessage.classList.add('message', 'bot-message');
+                loadingMessage.id = 'loading-message';
+                loadingMessage.innerHTML = `<strong>Ollama:</strong> Processing your image...`;
+                chatBox.appendChild(loadingMessage);
+                
+                // Upload the image first
+                const uploadResponse = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!uploadResponse.ok) {
+                    throw new Error('Failed to upload image.');
+                }
+                
+                const uploadData = await uploadResponse.json();
+                uploadedImagePath = uploadData.path;
+                
+                // Then process the image
+                const processResponse = await fetch('/process_image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image_path: uploadedImagePath,
+                        prompt: imagePrompt.value,
+                        model: selectedModel
+                    }),
+                });
+                
+                if (!processResponse.ok) {
+                    throw new Error('Failed to process image.');
+                }
+                
+                const processData = await processResponse.json();
+                
+                // Remove loading message
+                document.getElementById('loading-message').remove();
+                
+                // Create response message
+                const responseMessage = document.createElement('div');
+                responseMessage.classList.add('message', 'bot-message');
+                
+                if (processData.processed_image) {
+                    // Model returned a processed image
+                    responseMessage.innerHTML = `
+                        <strong>Ollama:</strong> ${processData.message || 'Image processed successfully'}
+                        <div class="image-container">
+                            <img src="${processData.processed_image}" alt="Processed Image">
+                        </div>
+                    `;
+                } else if (processData.text_response) {
+                    // Model only returned text
+                    responseMessage.innerHTML = `
+                        <strong>Ollama:</strong> ${processData.text_response}
+                        <div class="image-container">
+                            <img src="${processData.original_image}" alt="Original Image">
+                            <p><em>Note: The model provided a text response only. Image processing may not be supported by the selected model.</em></p>
+                        </div>
+                    `;
+                }
+                
+                chatBox.appendChild(responseMessage);
+                
+                // Clear the image input and preview
+                imageInput.value = '';
+                document.getElementById('image-preview').innerHTML = '';
+                document.getElementById('file-name').textContent = 'No file selected';
+                imagePrompt.value = '';
+                
+            } catch (error) {
+                console.error('Error processing image:', error);
+                
+                // Remove loading message if it exists
+                const loadingMsg = document.getElementById('loading-message');
+                if (loadingMsg) loadingMsg.remove();
+                
+                // Display error message
+                const errorMessage = document.createElement('div');
+                errorMessage.classList.add('message', 'bot-message');
+                errorMessage.innerHTML = `<strong>Error:</strong> ${error.message || 'Failed to process your image. Please try again.'}`;
+                chatBox.appendChild(errorMessage);
+            }
+            
+            // Scroll to bottom
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Fetch models when the page loads
+        fetchModels();
+        
+        // Add event listener for Enter key in text mode
+        document.getElementById('user-input').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // Add event listener for Enter key in image mode
+        document.getElementById('image-prompt').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                processImage();
+            }
+        });
+    </script>
+</body>
+</html>
